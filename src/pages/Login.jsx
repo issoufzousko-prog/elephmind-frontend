@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Lock, ArrowRight, Stethoscope, Eye, EyeOff } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { API_URL } from '../config/api';
 
 const Login = () => {
     const navigate = useNavigate();
@@ -13,8 +14,6 @@ const Login = () => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    // API URL from environment or default
-    const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8022';
     const [error, setError] = useState('');
 
     const handleLogin = async (e) => {
@@ -50,6 +49,14 @@ const Login = () => {
             setLoading(false);
         }
     };
+
+    // Redirect if already logged in
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            navigate('/app/dashboard');
+        }
+    }, [navigate]);
 
     return (
         <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-brand-light">
@@ -137,7 +144,7 @@ const Login = () => {
                     </div>
 
                     <p className="text-center text-xs text-gray-400 mt-4 pt-4 border-t border-gray-100">
-                        v2.0.0 (Production)
+                        v2.2.0-Persist
                     </p>
                 </form>
             </motion.div>

@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { BarChart3, Clock, Activity, AlertTriangle, Stethoscope, FileImage, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8022';
+import { API_URL } from '../config/api';
 
 const Dashboard = () => {
     const [stats, setStats] = useState(null);
@@ -130,7 +129,7 @@ const Dashboard = () => {
                             <Stethoscope className="w-5 h-5 text-purple-500" />
                         </div>
                         <div className="space-y-2">
-                            {Object.keys(stats.by_domain).length === 0 ? (
+                            {(!stats.by_domain || Object.keys(stats.by_domain).length === 0) ? (
                                 <p className="text-gray-400 text-sm">Aucune donnée</p>
                             ) : (
                                 Object.entries(stats.by_domain).map(([domain, count]) => (
@@ -154,7 +153,7 @@ const Dashboard = () => {
                             <AlertTriangle className="w-5 h-5 text-orange-500" />
                         </div>
                         <div className="space-y-2">
-                            {Object.keys(stats.by_priority).length === 0 ? (
+                            {(!stats.by_priority || Object.keys(stats.by_priority).length === 0) ? (
                                 <p className="text-gray-400 text-sm">Aucune donnée</p>
                             ) : (
                                 Object.entries(stats.by_priority).map(([priority, count]) => (
@@ -181,7 +180,7 @@ const Dashboard = () => {
                         <FileImage className="w-5 h-5 text-gray-400" />
                     </div>
 
-                    {stats.recent_analyses.length === 0 ? (
+                    {(!stats.recent_analyses || stats.recent_analyses.length === 0) ? (
                         <div className="text-center py-12">
                             <Activity className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                             <p className="text-gray-500">Aucune analyse effectuée</p>
@@ -208,7 +207,7 @@ const Dashboard = () => {
                                 </thead>
                                 <tbody>
                                     {stats.recent_analyses.map((analysis) => (
-                                        <tr key={analysis.id} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                        <tr key={analysis.id || Math.random()} className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                                             <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-300">
                                                 {new Date(analysis.created_at).toLocaleDateString('fr-FR')}
                                             </td>

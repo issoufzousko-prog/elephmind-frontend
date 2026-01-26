@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Upload, X, Loader2, AlertCircle, CheckCircle,
-    FileImage, User, Calendar, Hash, Camera,
+    FileImage, User, Calendar, Hash, Camera, FileText,
     Stethoscope, TrendingUp, Activity, Clock,
     ChevronRight, Download, Share2, Brain
 } from 'lucide-react';
@@ -115,33 +115,99 @@ class ErrorBoundary extends Component {
     }
 }
 // API URL
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8022';
+import { API_URL } from '../config/api';
 
-// Patient Form Component
+// Patient Form Component with Search
+import { usePatients } from '../context/PatientContext';
+import { Search } from 'lucide-react';
+
 const PatientInfoForm = ({ patientInfo, setPatientInfo }) => {
     const [photoPreview, setPhotoPreview] = React.useState(null);
+    const { patients } = usePatients();
+    const [searchTerm, setSearchTerm] = useState('');
+    const [showResults, setShowResults] = useState(false);
 
     // Cleanup ObjectURL on unmount or photo change
     React.useEffect(() => {
-        if (patientInfo.photo) {
+        if (patientInfo.photo && typeof patientInfo.photo !== 'string') {
             const url = URL.createObjectURL(patientInfo.photo);
             setPhotoPreview(url);
             return () => URL.revokeObjectURL(url);
+        } else if (typeof patientInfo.photo === 'string') {
+            setPhotoPreview(patientInfo.photo);
         } else {
             setPhotoPreview(null);
         }
     }, [patientInfo.photo]);
 
+    const filteredPatients = patients.filter(p =>
+        searchTerm && (
+            (p.firstName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+            (p.lastName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+            (p.patientId?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+        )
+    );
+
+    const selectPatient = (p) => {
+        setPatientInfo({
+            firstName: p.firstName || '',
+            lastName: p.lastName || '',
+            patientId: p.patientId || p.id || '',
+            birthDate: p.birthDate || '',
+            photo: p.photo || null
+        });
+        setSearchTerm('');
+        setShowResults(false);
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700"
+            className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 relative"
         >
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <User className="h-5 w-5 text-brand-primary" />
-                Informations Patient
-            </h3>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <User className="h-5 w-5 text-brand-primary" />
+                    Informations Patient
+                </h3>
+                <div className="relative">
+                    <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-1.5 border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-brand-primary">
+                        <Search className="h-4 w-4 text-gray-400 mr-2" />
+                        <input
+                            type="text"
+                            placeholder="Rechercher..."
+                            className="bg-transparent border-none focus:ring-0 text-sm w-32 outline-none dark:text-white"
+                            value={searchTerm}
+                            onChange={(e) => {
+                                setSearchTerm(e.target.value);
+                                setShowResults(true);
+                            }}
+                            onFocus={() => setShowResults(true)}
+                        />
+                    </div>
+                    {showResults && searchTerm && (
+                        <div className="absolute top-full right-0 w-64 mt-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                            {filteredPatients.length > 0 ? (
+                                <ul>
+                                    {filteredPatients.map(p => (
+                                        <li
+                                            key={p.id}
+                                            onClick={() => selectPatient(p)}
+                                            className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm border-b border-gray-50 last:border-0 dark:border-gray-700"
+                                        >
+                                            <div className="font-bold text-gray-900 dark:text-white">{p.firstName} {p.lastName}</div>
+                                            <div className="text-xs text-brand-primary">{p.patientId || p.id}</div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <div className="p-3 text-sm text-gray-500 text-center">Aucun patient trouvé</div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
 
             <div className="flex gap-6">
                 {/* Photo */}
@@ -308,6 +374,8 @@ const ImageUploadZone = ({ image, setImage, isAnalyzing }) => {
 
 // Results Panel with Charts
 const ResultsPanel = ({ result, isAnalyzing }) => {
+    const [zoomedImage, setZoomedImage] = useState(null);
+
     if (isAnalyzing) {
         return (
             <motion.div
@@ -358,11 +426,15 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
     }
 
     // Translate predictions for display
-    const translatedPredictions = predictions.map(p => ({
-        ...p,
-        name: translateLabel(p.label) || p.label,
-        label: translateLabel(p.label) || p.label
-    }));
+    // Translate predictions for display
+    const translatedPredictions = predictions.map(p => {
+        const rawLabel = p.label || p.name || 'Inconnu';
+        return {
+            ...p,
+            name: translateLabel(rawLabel) || rawLabel,
+            label: translateLabel(rawLabel) || rawLabel
+        };
+    });
 
     console.log('🎨 Rendering ResultsPanel with:', { diagnosis, confidence, predictions: predictions.length });
 
@@ -409,7 +481,7 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                         {result.original_image && (
                             <div
                                 className="relative group cursor-pointer"
-                                onClick={() => window.open(`data:image/png;base64,${result.original_image}`, '_blank')}
+                                onClick={() => setZoomedImage({ src: `data:image/png;base64,${result.original_image}`, title: 'Image Originale' })}
                             >
                                 <img
                                     src={`data:image/png;base64,${result.original_image}`}
@@ -427,7 +499,7 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                         {result.heatmap && (
                             <div
                                 className="relative group cursor-pointer"
-                                onClick={() => window.open(`data:image/png;base64,${result.heatmap}`, '_blank')}
+                                onClick={() => setZoomedImage({ src: `data:image/png;base64,${result.heatmap}`, title: 'Zones d\'Attention (GradCAM++)' })}
                             >
                                 <img
                                     src={`data:image/png;base64,${result.heatmap}`}
@@ -466,7 +538,7 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                                 dataKey="name"
                                 width={180}
                                 tick={{ fill: '#6b7280', fontSize: 10 }}
-                                tickFormatter={(value) => value.length > 30 ? value.substring(0, 30) + '...' : value}
+                                tickFormatter={(value) => (value && value.length > 30) ? value.substring(0, 30) + '...' : (value || '')}
                             />
                             <Tooltip
                                 contentStyle={{
@@ -519,16 +591,20 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                                 label={false}
                             >
                                 {translatedPredictions.slice(0, 5).map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} name={entry.name} />
                                 ))}
                             </Pie>
-                            <Tooltip formatter={(value) => [`${value}%`, 'Probabilité']} />
+                            <Tooltip formatter={(value, name) => [`${value}%`, name]} />
                             <Legend
-                                layout="vertical"
-                                align="right"
-                                verticalAlign="middle"
-                                formatter={(value) => value.length > 25 ? value.substring(0, 25) + '...' : value}
-                                wrapperStyle={{ fontSize: '11px', paddingLeft: '10px' }}
+                                layout="horizontal"
+                                verticalAlign="bottom"
+                                align="center"
+                                payload={(translatedPredictions || []).slice(0, 3).map((entry, index) => ({
+                                    value: (entry.name && entry.name.length > 20) ? entry.name.substring(0, 20) + '...' : (entry.name || 'Inconnu'),
+                                    type: 'circle',
+                                    color: COLORS[index % COLORS.length]
+                                }))}
+                                wrapperStyle={{ fontSize: '10px', marginTop: '10px' }}
                             />
                         </PieChart>
                     </ResponsiveContainer>
@@ -564,21 +640,66 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
 
             {/* Actions */}
             <div className="flex gap-4">
-                <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-brand-primary text-white rounded-xl font-medium hover:bg-brand-primary/90 transition-colors">
+                <button
+                    onClick={() => {
+                        // Download Report logic (simplified to downloading heatmap for now)
+                        if (result.heatmap) {
+                            const link = document.createElement('a');
+                            link.href = `data:image/png;base64,${result.heatmap}`;
+                            link.download = `Analysis_ElephMind_${new Date().toISOString().slice(0, 10)}.png`;
+                            link.click();
+                        } else {
+                            alert('Aucune donnée à télécharger');
+                        }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-brand-primary text-white rounded-xl font-medium hover:bg-brand-primary/90 transition-colors"
+                >
                     <Download className="h-5 w-5" />
-                    Télécharger le Rapport
+                    Télécharger l'Analyse
                 </button>
-                <button className="flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
-                    <Share2 className="h-5 w-5" />
-                    Partager
+                <button
+                    onClick={() => {
+                        // Navigate to patient folder using router to preserve state
+                        navigate('/app/patients');
+                    }}
+                    className="flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                >
+                    <FileText className="h-5 w-5" />
+                    Voir Dossier
                 </button>
             </div>
+
+            {/* Image Zoom Modal */}
+            {zoomedImage && (
+                <div
+                    className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+                    onClick={() => setZoomedImage(null)}
+                >
+                    <div className="relative max-w-4xl max-h-[90vh]">
+                        <button
+                            className="absolute -top-10 right-0 text-white hover:text-gray-300"
+                            onClick={() => setZoomedImage(null)}
+                        >
+                            <X className="h-8 w-8" />
+                        </button>
+                        <img
+                            src={zoomedImage.src}
+                            alt={zoomedImage.title}
+                            className="max-w-full max-h-[85vh] object-contain rounded-lg"
+                        />
+                        <p className="text-center text-white mt-2">{zoomedImage.title}</p>
+                    </div>
+                </div>
+            )}
         </motion.div>
     );
 };
 
 // Main Analysis Page
 const Analysis = () => {
+    // Context for persistence
+    const { currentAnalysis, setCurrentAnalysis } = usePatients();
+
     const [patientInfo, setPatientInfo] = useState({
         firstName: '',
         lastName: '',
@@ -588,7 +709,39 @@ const Analysis = () => {
     });
     const [image, setImage] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [result, setResult] = useState(null);
+
+    // Initialize result from context if available
+    const [result, setResult] = useState(() => currentAnalysis ? currentAnalysis.result : null);
+
+    // Sync result to context when it changes (save)
+    useEffect(() => {
+        if (result && !isAnalyzing) {
+            // Only auto-save if we have a valid completed result
+            // and we are not currently analyzing (to avoid partial state saves)
+            // We construct the "analysis object" here
+            const analysisData = {
+                result: result,
+                // We can't easily persist the File object or blob URL cleanly across reloads without re-creating it,
+                // but we can rely on result metadata if it has the image path or base64. 
+                // For now, we focus on the result JSON.
+            };
+            setCurrentAnalysis(analysisData);
+        }
+    }, [result, isAnalyzing, setCurrentAnalysis]);
+
+    // Restore context state on mount if local is empty
+    useEffect(() => {
+        if (currentAnalysis && !result) {
+            setResult(currentAnalysis.result);
+            // Verify if we have patient metadata to restore too
+            if (currentAnalysis.result && currentAnalysis.result.patient_metadata) {
+                const meta = currentAnalysis.result.patient_metadata;
+                // Restore metadata to form...
+                // (This logic is already in pollResult, we could duplicate or refactor, 
+                // but typically if result is set, the UI renders the charts/report directly, skipping form)
+            }
+        }
+    }, [currentAnalysis]); // Run on mount/update
 
     const [error, setError] = useState(null);
     const navigate = useNavigate();

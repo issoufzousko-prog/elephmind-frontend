@@ -10,20 +10,39 @@ const AppLayout = () => {
     const [user, setUser] = useState(null);
     const navigate = useNavigate();
 
-    // Check authentication
+    // Check authentication & Verify session with Backend
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            navigate('/login');
-            return;
-        }
-        try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            setUser({ username: payload.sub });
-        } catch (e) {
-            localStorage.removeItem('token');
-            navigate('/login');
-        }
+        const verifySession = async () => {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                navigate('/login');
+                return;
+            }
+
+            try {
+                // 1. Local Check
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                const username = payload.sub;
+                setUser({ username });
+
+                // 2. Server Check (Critical for volatile DBs)
+                const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8022';
+                const res = await fetch(`${API_URL}/api/dashboard/stats`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (res.status === 401 || res.status === 404) {
+                    console.warn("Session invalid on server - logging out");
+                    throw new Error("Session expired");
+                }
+            } catch (e) {
+                console.error("Auth Error:", e);
+                localStorage.removeItem('token');
+                navigate('/login');
+            }
+        };
+
+        verifySession();
     }, [navigate]);
 
     // Dark mode

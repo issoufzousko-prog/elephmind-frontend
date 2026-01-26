@@ -65,7 +65,7 @@ const Footer = () => {
                 </div>
 
                 <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center text-gray-500 text-sm">
-                    <p>© 2026 ElephMind AI. Tous droits réservés.</p>
+                    <p>© 2026 ElephMind AI. Tous droits réservés. <span className="text-xs text-gray-700 dark:text-gray-600">v2.2.0-Persist</span></p>
                     <div className="flex space-x-6 mt-4 md:mt-0">
                         <Link to="/privacy" className="hover:text-white transition-colors">Politique de Confidentialité</Link>
                         <Link to="/terms" className="hover:text-white transition-colors">Conditions d'Utilisation</Link>

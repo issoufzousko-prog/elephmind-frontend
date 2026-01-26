@@ -1,0 +1,11 @@
+# Ignore backend server (deployed separately on HuggingFace)
+server/
+
+# Ignore node_modules
+node_modules/
+
+# Ignore other large/unnecessary files
+*.db
+*.log
+data_storage/
+devstack/
