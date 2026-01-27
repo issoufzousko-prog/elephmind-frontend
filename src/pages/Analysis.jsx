@@ -866,7 +866,7 @@ const Analysis = () => {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analyse IA Assistée (v2.3.1)</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analyse IA Assistée (v2.3.2)</h1>
                 <p className="text-gray-500 dark:text-gray-400 mt-1">
                     Téléchargez une image médicale pour obtenir une analyse par intelligence artificielle
                 </p>

@@ -71,7 +71,7 @@ const Login = () => {
                     <div className="bg-brand-primary/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Stethoscope className="h-8 w-8 text-brand-primary" />
                     </div>
-                    <h2 className="text-2xl font-bold text-brand-dark">Accès Praticien (v2.3.1)</h2>
+                    <h2 className="text-2xl font-bold text-brand-dark">Accès Praticien (v2.3.2)</h2>
                     <p className="text-gray-500 text-sm mt-2">Connectez-vous à la suite ElephMind</p>
                 </div>
 
