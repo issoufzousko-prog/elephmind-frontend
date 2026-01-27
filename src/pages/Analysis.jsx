@@ -375,6 +375,7 @@ const ImageUploadZone = ({ image, setImage, isAnalyzing }) => {
 // Results Panel with Charts
 const ResultsPanel = ({ result, isAnalyzing }) => {
     const [zoomedImage, setZoomedImage] = useState(null);
+    const navigate = useNavigate(); // Fix: Add hook here
 
     if (isAnalyzing) {
         return (
