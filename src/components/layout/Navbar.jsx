@@ -59,6 +59,7 @@ const Navbar = () => {
 
     const handleLogout = () => {
         localStorage.removeItem('token');
+        localStorage.removeItem('elephmind_current_analysis'); // Clear persisted analysis
         setUser(null);
         window.location.href = '/';
     };

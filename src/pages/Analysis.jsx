@@ -12,6 +12,8 @@ import {
     ResponsiveContainer, PieChart, Pie, Cell, RadarChart,
     PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend
 } from 'recharts';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const COLORS = ['#1B7D7D', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
@@ -278,20 +280,22 @@ const PatientInfoForm = ({ patientInfo, setPatientInfo }) => {
 };
 
 // Image Upload Zone
-const ImageUploadZone = ({ image, setImage, isAnalyzing }) => {
+const ImageUploadZone = ({ image, setImage, isAnalyzing, previewOverride }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [imagePreview, setImagePreview] = useState(null);
 
     // Cleanup ObjectURL on unmount or image change
     useEffect(() => {
-        if (image && image.type?.startsWith('image/')) {
+        if (previewOverride) {
+            setImagePreview(previewOverride);
+        } else if (image && image.type?.startsWith('image/')) {
             const url = URL.createObjectURL(image);
             setImagePreview(url);
             return () => URL.revokeObjectURL(url);
         } else {
             setImagePreview(null);
         }
-    }, [image]);
+    }, [image, previewOverride]);
 
     const handleDrop = useCallback((e) => {
         e.preventDefault();
@@ -323,7 +327,8 @@ const ImageUploadZone = ({ image, setImage, isAnalyzing }) => {
             onDragLeave={handleDragLeave}
         >
             <div className="text-center">
-                {image ? (
+
+                {(image || imagePreview) ? (
                     <div className="relative">
                         {imagePreview && (
                             <img
@@ -340,9 +345,16 @@ const ImageUploadZone = ({ image, setImage, isAnalyzing }) => {
                                 <X className="h-4 w-4" />
                             </button>
                         )}
-                        <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
-                            {image.name} ({(image.size / 1024 / 1024).toFixed(2)} MB)
-                        </p>
+                        {image && (
+                            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                                {image.name} ({(image.size / 1024 / 1024).toFixed(2)} MB)
+                            </p>
+                        )}
+                        {!image && imagePreview && (
+                            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                                Image restaurée (Analyse en cours)
+                            </p>
+                        )}
                     </div>
                 ) : (
                     <>
@@ -441,9 +453,10 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
 
     return (
         <motion.div
+            id="report-content"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
+            className="space-y-6 bg-white dark:bg-gray-900 p-4 rounded-xl" // Added bg for clear capture
         >
             {/* Main Diagnosis Card */}
             <div className="bg-gradient-to-br from-brand-primary to-emerald-600 rounded-2xl p-6 text-white shadow-xl">
@@ -642,21 +655,48 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
             {/* Actions */}
             <div className="flex gap-4">
                 <button
-                    onClick={() => {
-                        // Download Report logic (simplified to downloading heatmap for now)
-                        if (result.heatmap) {
-                            const link = document.createElement('a');
-                            link.href = `data:image/png;base64,${result.heatmap}`;
-                            link.download = `Analysis_ElephMind_${new Date().toISOString().slice(0, 10)}.png`;
-                            link.click();
-                        } else {
-                            alert('Aucune donnée à télécharger');
+                    onClick={async () => {
+                        const input = document.getElementById('report-content');
+                        if (!input) return;
+
+                        try {
+                            const canvas = await html2canvas(input, {
+                                scale: 2, // Higher quality
+                                useCORS: true, // Handle images
+                                logging: false
+                            });
+
+                            const imgData = canvas.toDataURL('image/png');
+                            const pdf = new jsPDF('p', 'mm', 'a4');
+                            const pdfWidth = pdf.internal.pageSize.getWidth();
+                            const pdfHeight = pdf.internal.pageSize.getHeight();
+                            const imgWidth = pdfWidth;
+                            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                            // Handle multiple pages if content is long
+                            let heightLeft = imgHeight;
+                            let position = 0;
+
+                            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                            heightLeft -= pdfHeight;
+
+                            while (heightLeft >= 0) {
+                                position = heightLeft - imgHeight;
+                                pdf.addPage();
+                                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                                heightLeft -= pdfHeight;
+                            }
+
+                            pdf.save(`Rapport_ElephMind_${new Date().toISOString().slice(0, 10)}.pdf`);
+                        } catch (err) {
+                            console.error("PDF generation failed", err);
+                            alert("Erreur lors de la génération du PDF");
                         }
                     }}
                     className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-brand-primary text-white rounded-xl font-medium hover:bg-brand-primary/90 transition-colors"
                 >
                     <Download className="h-5 w-5" />
-                    Télécharger l'Analyse
+                    Télécharger le Rapport PDF
                 </button>
                 <button
                     onClick={() => {
@@ -717,22 +757,54 @@ const Analysis = () => {
 
     // Resume polling on mount ONLY if strictly analyzing (not just completed)
     useEffect(() => {
+        // Restore image preview if available in context
+        if (currentAnalysis?.imagePreview) {
+            // We can't easily recreate the File object, but we can restore the visual preview
+            // We'll set a flag or local state to show this preview
+            setImage(null); // Clear file input as we rely on preview
+            // Pass the preview to the UploadZone via a prop or internal state? 
+            // Actually, ImageUploadZone uses 'image' prop. If it's null, it shows dropzone.
+            // We need to trick it or modify ImageUploadZone to accept a 'previewUrl' override.
+        }
+
         if (currentAnalysis && currentAnalysis.status === 'analyzing' && currentAnalysis.taskId) {
             console.log("🔄 Resuming analysis for Task ID:", currentAnalysis.taskId);
             setIsAnalyzing(true);
-            pollResult(currentAnalysis.taskId);
+
+            // Immediate check to make it feel faster
+            const checkNow = async () => {
+                const token = localStorage.getItem('token');
+                try {
+                    const res = await fetch(`${API_URL}/result/${currentAnalysis.taskId}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.status === 'completed') {
+                            setResult(data.result);
+                            setIsAnalyzing(false);
+                            return true; // Stop polling
+                        }
+                    }
+                } catch (e) { console.error("Immediate check failed", e); }
+                return false;
+            };
+
+            checkNow().then(stop => {
+                if (!stop) pollResult(currentAnalysis.taskId);
+            });
         }
-    }, []); // Run ONCE on mount
+    }, [currentAnalysis]); // Run ONCE on mount
 
     // Sync result to context when it changes (save)
     useEffect(() => {
-        // ... (existing persist logic for completed result is fine effectively, 
-        // but we need to ensure we don't overwrite if we are just transitioning)
         if (result && !isAnalyzing) {
             const analysisData = {
                 status: 'completed',
                 result: result,
-                taskId: null // Clear task ID when done
+                taskId: null, // Clear task ID when done
+                // Persist the preview for the result view if needed (though result often has it)
+                imagePreview: currentAnalysis?.imagePreview
             };
             setCurrentAnalysis(analysisData);
         }
@@ -749,53 +821,68 @@ const Analysis = () => {
         setResult(null);
         setError(null);
 
-        // Save 'analyzing' state immediately
-        // Note: we don't have task_id yet, but we mark intent
-        setCurrentAnalysis({ status: 'analyzing', result: null, taskId: null });
+        // CREATE PREVIEW FOR PERSISTENCE (Base64)
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            const base64Preview = reader.result;
 
-        try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                navigate('/login');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('file', image);
-
-            // 1. Upload
-            const uploadRes = await fetch(`${API_URL}/analyze`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                },
-                body: formData,
+            // Save 'analyzing' state immediately WITH PREVIEW
+            setCurrentAnalysis({
+                status: 'analyzing',
+                result: null,
+                taskId: null,
+                imagePreview: base64Preview // Save visual state
             });
 
-            if (uploadRes.status === 401) {
-                navigate('/login');
-                return;
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    navigate('/login');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('file', image);
+
+                // 1. Upload
+                const uploadRes = await fetch(`${API_URL}/analyze`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData,
+                });
+
+                if (uploadRes.status === 401) {
+                    navigate('/login');
+                    return;
+                }
+
+                if (!uploadRes.ok) {
+                    throw new Error("Erreur lors de l'envoi du fichier");
+                }
+
+                const { task_id } = await uploadRes.json();
+
+                // Update context with task_id and KEEP preview
+                setCurrentAnalysis({
+                    status: 'analyzing',
+                    result: null,
+                    taskId: task_id,
+                    imagePreview: base64Preview
+                });
+
+                // 2. Poll
+                pollResult(task_id);
+
+            } catch (err) {
+                console.error(err);
+                setError(err.message || "Erreur inconnue");
+                setIsAnalyzing(false);
+                setCurrentAnalysis(null);
             }
-
-            if (!uploadRes.ok) {
-                throw new Error("Erreur lors de l'envoi du fichier");
-            }
-
-            const { task_id } = await uploadRes.json();
-
-            // Update context with task_id so we can resume if user leaves now
-            setCurrentAnalysis({ status: 'analyzing', result: null, taskId: task_id });
-
-            // 2. Poll
-            pollResult(task_id);
-
-        } catch (err) {
-            console.error(err);
-            setError(err.message || "Erreur inconnue");
-            setIsAnalyzing(false);
-            // Clear context on error
-            setCurrentAnalysis(null);
-        }
+        };
+        reader.readAsDataURL(image);
     };
 
     const pollResult = async (taskId) => {
@@ -866,7 +953,9 @@ const Analysis = () => {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analyse IA Assistée (v2.3.2)</h1>
+                <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-primary to-emerald-600">
+                    Analyse IA Assistée (v2.4.0)
+                </h1>
                 <p className="text-gray-500 dark:text-gray-400 mt-1">
                     Téléchargez une image médicale pour obtenir une analyse par intelligence artificielle
                 </p>
@@ -879,8 +968,13 @@ const Analysis = () => {
 
                     {!result ? (
                         <>
-                            <ImageUploadZone image={image} setImage={setImage} isAnalyzing={isAnalyzing} />
-                            {image && !isAnalyzing && (
+                            <ImageUploadZone
+                                image={image}
+                                setImage={setImage}
+                                isAnalyzing={isAnalyzing}
+                                previewOverride={currentAnalysis?.imagePreview}
+                            />
+                            {(image || currentAnalysis?.imagePreview) && !isAnalyzing && (
                                 <motion.button
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
