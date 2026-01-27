@@ -708,40 +708,35 @@ const Analysis = () => {
         photo: null
     });
     const [image, setImage] = useState(null);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    // Initialize isAnalyzing from context
+    const [isAnalyzing, setIsAnalyzing] = useState(() => currentAnalysis ? currentAnalysis.status === 'analyzing' : false);
 
     // Initialize result from context if available
     const [result, setResult] = useState(() => currentAnalysis ? currentAnalysis.result : null);
 
+    // Resume polling on mount ONLY if strictly analyzing (not just completed)
+    useEffect(() => {
+        if (currentAnalysis && currentAnalysis.status === 'analyzing' && currentAnalysis.taskId) {
+            console.log("🔄 Resuming analysis for Task ID:", currentAnalysis.taskId);
+            setIsAnalyzing(true);
+            pollResult(currentAnalysis.taskId);
+        }
+    }, []); // Run ONCE on mount
+
     // Sync result to context when it changes (save)
     useEffect(() => {
+        // ... (existing persist logic for completed result is fine effectively, 
+        // but we need to ensure we don't overwrite if we are just transitioning)
         if (result && !isAnalyzing) {
-            // Only auto-save if we have a valid completed result
-            // and we are not currently analyzing (to avoid partial state saves)
-            // We construct the "analysis object" here
             const analysisData = {
+                status: 'completed',
                 result: result,
-                // We can't easily persist the File object or blob URL cleanly across reloads without re-creating it,
-                // but we can rely on result metadata if it has the image path or base64. 
-                // For now, we focus on the result JSON.
+                taskId: null // Clear task ID when done
             };
             setCurrentAnalysis(analysisData);
         }
     }, [result, isAnalyzing, setCurrentAnalysis]);
 
-    // Restore context state on mount if local is empty
-    useEffect(() => {
-        if (currentAnalysis && !result) {
-            setResult(currentAnalysis.result);
-            // Verify if we have patient metadata to restore too
-            if (currentAnalysis.result && currentAnalysis.result.patient_metadata) {
-                const meta = currentAnalysis.result.patient_metadata;
-                // Restore metadata to form...
-                // (This logic is already in pollResult, we could duplicate or refactor, 
-                // but typically if result is set, the UI renders the charts/report directly, skipping form)
-            }
-        }
-    }, [currentAnalysis]); // Run on mount/update
 
     const [error, setError] = useState(null);
     const navigate = useNavigate();
@@ -752,6 +747,10 @@ const Analysis = () => {
         setIsAnalyzing(true);
         setResult(null);
         setError(null);
+
+        // Save 'analyzing' state immediately
+        // Note: we don't have task_id yet, but we mark intent
+        setCurrentAnalysis({ status: 'analyzing', result: null, taskId: null });
 
         try {
             const token = localStorage.getItem('token');
@@ -783,6 +782,9 @@ const Analysis = () => {
 
             const { task_id } = await uploadRes.json();
 
+            // Update context with task_id so we can resume if user leaves now
+            setCurrentAnalysis({ status: 'analyzing', result: null, taskId: task_id });
+
             // 2. Poll
             pollResult(task_id);
 
@@ -790,6 +792,8 @@ const Analysis = () => {
             console.error(err);
             setError(err.message || "Erreur inconnue");
             setIsAnalyzing(false);
+            // Clear context on error
+            setCurrentAnalysis(null);
         }
     };
 
