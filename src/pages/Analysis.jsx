@@ -871,19 +871,57 @@ const Analysis = () => {
                 {/* Left Column - Input */}
                 <div className="space-y-6">
                     <PatientInfoForm patientInfo={patientInfo} setPatientInfo={setPatientInfo} />
-                    <ImageUploadZone image={image} setImage={setImage} isAnalyzing={isAnalyzing} />
 
-                    {image && !isAnalyzing && !result && (
-                        <motion.button
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            onClick={handleAnalyze}
-                            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-brand-primary to-emerald-500 text-white rounded-xl font-bold text-lg shadow-lg shadow-brand-primary/25 hover:shadow-xl transition-shadow"
+                    {!result ? (
+                        <>
+                            <ImageUploadZone image={image} setImage={setImage} isAnalyzing={isAnalyzing} />
+                            {image && !isAnalyzing && (
+                                <motion.button
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    onClick={handleAnalyze}
+                                    className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-brand-primary to-emerald-500 text-white rounded-xl font-bold text-lg shadow-lg shadow-brand-primary/25 hover:shadow-xl transition-shadow"
+                                >
+                                    <Brain className="h-6 w-6" />
+                                    Lancer l'Analyse IA
+                                    <ChevronRight className="h-5 w-5" />
+                                </motion.button>
+                            )}
+                        </>
+                    ) : (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 text-center"
                         >
-                            <Brain className="h-6 w-6" />
-                            Lancer l'Analyse IA
-                            <ChevronRight className="h-5 w-5" />
-                        </motion.button>
+                            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <CheckCircle className="h-8 w-8" />
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Analyse Terminée</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                                Les résultats sont affichés à droite.
+                            </p>
+
+                            <button
+                                onClick={() => {
+                                    setResult(null);
+                                    setImage(null);
+                                    setError(null);
+                                    setPatientInfo({
+                                        firstName: '',
+                                        lastName: '',
+                                        patientId: '',
+                                        birthDate: '',
+                                        photo: null
+                                    });
+                                    // Clear context
+                                    setCurrentAnalysis(null);
+                                }}
+                                className="w-full py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                            >
+                                Nouvelle Analyse
+                            </button>
+                        </motion.div>
                     )}
                 </div>
 
