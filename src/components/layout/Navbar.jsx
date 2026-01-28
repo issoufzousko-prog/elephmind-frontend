@@ -59,8 +59,9 @@ const Navbar = () => {
 
     const handleLogout = () => {
         localStorage.removeItem('token');
-        localStorage.removeItem('elephmind_current_analysis'); // Clear persisted analysis
+        // No need to clear specific analysis key manually as Context handles it reactively implies null username
         setUser(null);
+        window.dispatchEvent(new Event('auth-change'));
         window.location.href = '/';
     };
 

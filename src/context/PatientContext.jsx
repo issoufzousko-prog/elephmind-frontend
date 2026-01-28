@@ -134,16 +134,65 @@ export const PatientProvider = ({ children }) => {
     // Analysis State Persistence (Keep Local for now or move next?)
     // Analysis is stateless in backend (log only), but this tracks "current active"
     // Keep local for UI state
-    const [currentAnalysis, setCurrentAnalysis] = useState(() => {
-        const saved = localStorage.getItem('elephmind_current_analysis');
-        return saved ? JSON.parse(saved) : null;
-    });
-
-    useEffect(() => {
-        if (currentAnalysis) {
-            localStorage.setItem('elephmind_current_analysis', JSON.stringify(currentAnalysis));
+    // Helper to get username from token
+    const getUsername = () => {
+        const token = localStorage.getItem('token');
+        if (!token) return null;
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            return payload.sub; // 'sub' contains username from backend
+        } catch (e) {
+            return null;
         }
-    }, [currentAnalysis]);
+    };
+
+    const [username, setUsername] = useState(getUsername());
+
+    // Listen to storage events to update username (sync tabs)
+    useEffect(() => {
+        const handleStorage = () => setUsername(getUsername());
+        window.addEventListener('storage', handleStorage);
+        // Custom event for same-tab login/logout
+        window.addEventListener('auth-change', handleStorage);
+        return () => {
+            window.removeEventListener('storage', handleStorage);
+            window.removeEventListener('auth-change', handleStorage);
+        };
+    }, []);
+
+    // Analysis State Persistence - Keyed by Username
+    const [currentAnalysis, setCurrentAnalysis] = useState(null);
+
+    // Load analysis when username changes
+    useEffect(() => {
+        if (!username) {
+            setCurrentAnalysis(null);
+            return;
+        }
+        const key = `elephmind_analysis_${username}`;
+        const saved = localStorage.getItem(key);
+        if (saved) {
+            try {
+                setCurrentAnalysis(JSON.parse(saved));
+            } catch (e) {
+                console.error("Failed to parse saved analysis", e);
+                localStorage.removeItem(key);
+            }
+        } else {
+            setCurrentAnalysis(null);
+        }
+    }, [username]);
+
+    // Save analysis when it changes
+    useEffect(() => {
+        if (!username) return;
+        const key = `elephmind_analysis_${username}`;
+        if (currentAnalysis) {
+            localStorage.setItem(key, JSON.stringify(currentAnalysis));
+        } else {
+            localStorage.removeItem(key);
+        }
+    }, [currentAnalysis, username]);
 
     return (
         <PatientContext.Provider value={{
