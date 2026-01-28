@@ -550,9 +550,9 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                             <YAxis
                                 type="category"
                                 dataKey="name"
-                                width={180}
+                                width={220}
                                 tick={{ fill: '#6b7280', fontSize: 10 }}
-                                tickFormatter={(value) => (value && value.length > 30) ? value.substring(0, 30) + '...' : (value || '')}
+                                tickFormatter={(value) => (value && value.length > 45) ? value.substring(0, 45) + '...' : (value || '')}
                             />
                             <Tooltip
                                 contentStyle={{
@@ -897,6 +897,16 @@ const Analysis = () => {
                 });
 
                 if (!res.ok) {
+                    if (res.status === 404 || res.status === 403) {
+                        // Critical Error: Job lost or Access Denied
+                        console.error("Stopping poll due to critical error:", res.status);
+                        clearInterval(interval);
+                        setError("Session expirée ou analyse introuvable. Veuillez relancer.");
+                        setIsAnalyzing(false);
+                        setCurrentAnalysis(null); // Clear persistence
+                        return;
+                    }
+
                     failures++;
                     if (failures >= maxFailures) throw new Error("Timeout serveur");
                     return;
