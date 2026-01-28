@@ -892,8 +892,13 @@ const Analysis = () => {
 
         const interval = setInterval(async () => {
             try {
-                const res = await fetch(`${API_URL}/result/${taskId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                // Add timestamp to prevent browser/CDN caching
+                const res = await fetch(`${API_URL}/result/${taskId}?_t=${Date.now()}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }
                 });
 
                 if (!res.ok) {
