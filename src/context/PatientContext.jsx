@@ -185,7 +185,13 @@ export const PatientProvider = ({ children }) => {
 
     // Save analysis when it changes
     useEffect(() => {
-        if (!username) return;
+        if (!username) {
+            // Check if we just logged out (username went from 'something' to null)
+            // Ideally we need prevUsername to know, but running this on !username is safe enough
+            // reset critical state
+            setPatients([]);
+            return;
+        }
         const key = `elephmind_analysis_${username}`;
         if (currentAnalysis) {
             localStorage.setItem(key, JSON.stringify(currentAnalysis));
