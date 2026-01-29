@@ -58,8 +58,11 @@ const Navbar = () => {
     };
 
     const handleLogout = () => {
+        // Explicitly wipe the user-specific analysis persistence
+        if (user && user.username) {
+            localStorage.removeItem(`elephmind_analysis_${user.username}`);
+        }
         localStorage.removeItem('token');
-        // No need to clear specific analysis key manually as Context handles it reactively implies null username
         setUser(null);
         window.dispatchEvent(new Event('auth-change'));
         window.location.href = '/';
