@@ -841,11 +841,12 @@ const Analysis = () => {
                     return;
                 }
 
+                // 1. UPLOAD IMAGE (Physical Storage)
                 const formData = new FormData();
                 formData.append('file', image);
 
-                // 1. Upload
-                const uploadRes = await fetch(`${API_URL}/analyze`, {
+                console.log("📤 Uploading image...");
+                const uploadRes = await fetch(`${API_URL}/upload`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -859,10 +860,33 @@ const Analysis = () => {
                 }
 
                 if (!uploadRes.ok) {
-                    throw new Error("Erreur lors de l'envoi du fichier");
+                    throw new Error("Échec de l'upload sécurisé");
                 }
 
-                const { task_id } = await uploadRes.json();
+                const { image_id } = await uploadRes.json();
+                console.log("✅ Image secured with ID:", image_id);
+
+                // 2. CREATE JOB (Decoupled Analysis)
+                console.log("🚀 Starting analysis job...");
+                const analysisRes = await fetch(`${API_URL}/analyze`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image_id: image_id,
+                        domain: "Triage", // Default for now, could be dynamic
+                        priority: "Normale"
+                    }),
+                });
+
+                if (!analysisRes.ok) {
+                    throw new Error("Erreur lors de la création du job");
+                }
+
+                const { task_id } = await analysisRes.json();
+                console.log("✅ Job started:", task_id);
 
                 // Update context with task_id and KEEP preview
                 setCurrentAnalysis({
@@ -872,7 +896,7 @@ const Analysis = () => {
                     imagePreview: base64Preview
                 });
 
-                // 2. Poll
+                // 3. POLL RESULT
                 pollResult(task_id);
 
             } catch (err) {
