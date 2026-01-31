@@ -747,6 +747,11 @@ const Analysis = () => {
     // Context for persistence
     const { currentAnalysis, setCurrentAnalysis } = usePatients();
 
+    // ✅ V5 KILL SWITCH: Refs for zombie prevention
+    const currentJobIdRef = useRef(null);
+    const abortControllerRef = useRef(null);
+    const pollingIntervalRef = useRef(null);
+
     const [patientInfo, setPatientInfo] = useState({
         firstName: '',
         lastName: '',
@@ -842,6 +847,16 @@ const Analysis = () => {
         };
 
         restoreState();
+
+        // ✅ V5 CLEANUP: Kill polling on component unmount
+        return () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+            }
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+        };
     }, []); // Run ONCE on mount
 
     const handleAnalyze = async () => {
@@ -940,19 +955,40 @@ const Analysis = () => {
     };
 
     const pollResult = async (taskId) => {
+        // ✅ V5 KILL SWITCH: Clean up old polling
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+        }
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+
+        // Set new job ID as current
+        currentJobIdRef.current = taskId;
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
+
         let failures = 0;
         const maxFailures = 20;
         const token = localStorage.getItem('token');
 
         const interval = setInterval(async () => {
+            // ✅ ZOMBIE PROTECTION
+            if (currentJobIdRef.current !== taskId) {
+                console.log('🛑 Zombie polling detected - Stopping');
+                clearInterval(interval);
+                return;
+            }
+
             try {
-                // Add timestamp to prevent browser/CDN caching
                 const res = await fetch(`${API_URL}/result/${taskId}?_t=${Date.now()}`, {
                     headers: {
                         'Authorization': `Bearer ${token}`,
                         'Cache-Control': 'no-cache',
                         'Pragma': 'no-cache'
-                    }
+                    },
+                    signal // ✅ Attach abort signal for kill switch
                 });
 
                 if (!res.ok) {
@@ -977,8 +1013,16 @@ const Analysis = () => {
                 console.log('📌 Result exists:', !!data.result);
                 console.log('📌 Error:', data.error);
 
+                // ✅ FINAL CHECK before setState
+                if (currentJobIdRef.current !== taskId) {
+                    console.log('🛑 Job changed - discarding result');
+                    clearInterval(interval);
+                    return;
+                }
+
                 if (data.status === 'completed') {
                     clearInterval(interval);
+                    pollingIntervalRef.current = null;
                     console.log('✅ Result received:', data.result);
                     console.log('✅ Setting result to state...');
                     setResult(data.result);
@@ -1008,10 +1052,16 @@ const Analysis = () => {
                     }
                 } else if (data.status === 'failed') {
                     clearInterval(interval);
+                    pollingIntervalRef.current = null;
                     setError(data.error || "Analyse échouée");
                     setIsAnalyzing(false);
                 }
             } catch (err) {
+                if (err.name === 'AbortError') {
+                    console.log('🛑 Polling aborted');
+                    clearInterval(interval);
+                    return;
+                }
                 failures++;
                 if (failures >= maxFailures) {
                     clearInterval(interval);
@@ -1020,6 +1070,8 @@ const Analysis = () => {
                 }
             }
         }, 2000);
+
+        pollingIntervalRef.current = interval; // ✅ Store for cleanup
     };
 
     return (
@@ -1076,6 +1128,16 @@ const Analysis = () => {
 
                             <button
                                 onClick={() => {
+                                    // ✅ V5 KILL SWITCH: Stop old polling
+                                    if (pollingIntervalRef.current) {
+                                        clearInterval(pollingIntervalRef.current);
+                                        pollingIntervalRef.current = null;
+                                    }
+                                    if (abortControllerRef.current) {
+                                        abortControllerRef.current.abort();
+                                    }
+                                    currentJobIdRef.current = null; // Clear job tracking
+
                                     setResult(null);
                                     setImage(null);
                                     setError(null);
