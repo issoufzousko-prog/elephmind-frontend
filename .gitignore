@@ -49,7 +49,7 @@ venv/
 
 
 # Backend (Managed separately)
-server/
+# server/ (Removed for Monorepo deployment)
 restart_server.bat
 *.sh
 data_storage/

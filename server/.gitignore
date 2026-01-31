@@ -1,0 +1,6 @@
+models/ 
+data_storage/ 
+elephmind.db 
+.env 
+venv/ 
+__pycache__/
