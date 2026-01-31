@@ -806,39 +806,58 @@ const Analysis = () => {
     }, [currentAnalysis]); // Run ONCE on mount
 
     // Sync result to context when it changes (save)
-    // --- STATE RECOVERY (Source of Truth: Backend) ---
+    // --- ✅ V5 STATE RECOVERY (Source of Truth: Backend) ---
     useEffect(() => {
         const restoreState = async () => {
             const token = localStorage.getItem('token');
             if (!token) return;
 
             try {
-                // FORCE RESYNC with Backend
-                const res = await fetch(`${API_URL}/job/current`, {
+                // ✅ V5: Use new state/current endpoint for proper state reconstruction
+                const res = await fetch(`${API_URL}/api/state/current`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 if (res.ok) {
-                    const job = await res.json();
-                    console.log("🔄 Restoring Job State:", job);
+                    const stateData = await res.json();
+                    console.log("🔄 V5 State Recovery:", stateData);
 
-                    if (job.status === 'pending' || job.status === 'processing') {
-                        // Job is running -> Restore "Analyzing" state
-                        setIsAnalyzing(true);
-                        setCurrentAnalysis({
-                            status: 'analyzing',
-                            taskId: job.task_id,
-                            imagePreview: null
-                        });
-                        pollResult(job.task_id); // Resume polling
-                    } else if (job.status === 'completed' && job.result) {
-                        // Job done -> Show Result immediately
-                        setResult(job.result);
-                        setIsAnalyzing(false);
-                    } else if (job.status === 'failed') {
-                        // Job failed -> Show error
-                        setError(job.error || "L'analyse précédente a échoué.");
-                        setIsAnalyzing(false);
+                    switch (stateData.state) {
+                        case 'ANALYZING':
+                            // Job is running -> Resume polling
+                            setIsAnalyzing(true);
+                            currentJobIdRef.current = stateData.task_id;
+                            setCurrentAnalysis({
+                                status: 'analyzing',
+                                taskId: stateData.task_id,
+                                imagePreview: null
+                            });
+                            pollResult(stateData.task_id);
+                            break;
+
+                        case 'COMPLETED':
+                            // Job done -> Show Result immediately
+                            setResult(stateData.result);
+                            setIsAnalyzing(false);
+                            break;
+
+                        case 'QC_FAILED':
+                            // Quality check failed -> Show rejection
+                            setResult(stateData.result);
+                            setError(stateData.message);
+                            setIsAnalyzing(false);
+                            break;
+
+                        case 'FAILED':
+                            // Job failed -> Show error
+                            setError(stateData.error || "L'analyse précédente a échoué.");
+                            setIsAnalyzing(false);
+                            break;
+
+                        case 'IDLE':
+                        default:
+                            // No active job -> Ready for upload
+                            break;
                     }
                 }
             } catch (err) {
