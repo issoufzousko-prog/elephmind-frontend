@@ -543,29 +543,31 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                         <TrendingUp className="h-5 w-5 text-brand-primary" />
                         Probabilités par Pathologie
                     </h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={translatedPredictions} layout="vertical" margin={{ left: 20, right: 20 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                            <XAxis type="number" domain={[0, 100]} tick={{ fill: '#6b7280', fontSize: 11 }} />
-                            <YAxis
-                                type="category"
-                                dataKey="name"
-                                width={220}
-                                tick={{ fill: '#6b7280', fontSize: 10 }}
-                                tickFormatter={(value) => (value && value.length > 45) ? value.substring(0, 45) + '...' : (value || '')}
-                            />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: '#1f2937',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    color: '#fff'
-                                }}
-                                formatter={(value) => [`${value}%`, 'Probabilité']}
-                            />
-                            <Bar dataKey="probability" fill="#1B7D7D" radius={[0, 4, 4, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
+                    <div className="min-h-[300px] h-[40vh] max-h-[500px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={translatedPredictions} layout="vertical" margin={{ left: 20, right: 20 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                <XAxis type="number" domain={[0, 100]} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                                <YAxis
+                                    type="category"
+                                    dataKey="name"
+                                    width={220}
+                                    tick={{ fill: '#6b7280', fontSize: 10 }}
+                                    tickFormatter={(value) => (value && value.length > 45) ? value.substring(0, 45) + '...' : (value || '')}
+                                />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: '#1f2937',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        color: '#fff'
+                                    }}
+                                    formatter={(value) => [`${value}%`, 'Probabilité']}
+                                />
+                                <Bar dataKey="probability" fill="#1B7D7D" radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
 
                 {/* Quality Radar Chart */}
@@ -574,54 +576,58 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                         <Stethoscope className="h-5 w-5 text-brand-primary" />
                         Qualité de l'Image
                     </h3>
-                    <ResponsiveContainer width="100%" height={200}>
-                        <RadarChart data={qualityMetrics}>
-                            <PolarGrid stroke="#e5e7eb" />
-                            <PolarAngleAxis dataKey="metric" tick={{ fill: '#6b7280', fontSize: 11 }} />
-                            <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                            <Radar
-                                name="Qualité"
-                                dataKey="value"
-                                stroke="#1B7D7D"
-                                fill="#1B7D7D"
-                                fillOpacity={0.5}
-                            />
-                        </RadarChart>
-                    </ResponsiveContainer>
+                    <div className="min-h-[220px] h-[30vh] max-h-[350px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <RadarChart data={qualityMetrics}>
+                                <PolarGrid stroke="#e5e7eb" />
+                                <PolarAngleAxis dataKey="metric" tick={{ fill: '#6b7280', fontSize: 11 }} />
+                                <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                                <Radar
+                                    name="Qualité"
+                                    dataKey="value"
+                                    stroke="#1B7D7D"
+                                    fill="#1B7D7D"
+                                    fillOpacity={0.5}
+                                />
+                            </RadarChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
 
                 {/* Pie Chart */}
                 <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Distribution des Résultats</h3>
-                    <ResponsiveContainer width="100%" height={280}>
-                        <PieChart>
-                            <Pie
-                                data={translatedPredictions.slice(0, 5)}
-                                dataKey="probability"
-                                nameKey="name"
-                                cx="50%"
-                                cy="45%"
-                                outerRadius={60}
-                                label={false}
-                            >
-                                {translatedPredictions.slice(0, 5).map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} name={entry.name} />
-                                ))}
-                            </Pie>
-                            <Tooltip formatter={(value, name) => [`${value}%`, name]} />
-                            <Legend
-                                layout="horizontal"
-                                verticalAlign="bottom"
-                                align="center"
-                                payload={(translatedPredictions || []).slice(0, 3).map((entry, index) => ({
-                                    value: (entry.name && entry.name.length > 20) ? entry.name.substring(0, 20) + '...' : (entry.name || 'Inconnu'),
-                                    type: 'circle',
-                                    color: COLORS[index % COLORS.length]
-                                }))}
-                                wrapperStyle={{ fontSize: '10px', marginTop: '10px' }}
-                            />
-                        </PieChart>
-                    </ResponsiveContainer>
+                    <div className="min-h-[280px] h-[35vh] max-h-[400px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={translatedPredictions.slice(0, 5)}
+                                    dataKey="probability"
+                                    nameKey="name"
+                                    cx="50%"
+                                    cy="45%"
+                                    outerRadius="65%"
+                                    label={false}
+                                >
+                                    {translatedPredictions.slice(0, 5).map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} name={entry.name} />
+                                    ))}
+                                </Pie>
+                                <Tooltip formatter={(value, name) => [`${value}%`, name]} />
+                                <Legend
+                                    layout="horizontal"
+                                    verticalAlign="bottom"
+                                    align="center"
+                                    payload={(translatedPredictions || []).slice(0, 3).map((entry, index) => ({
+                                        value: (entry.name && entry.name.length > 20) ? entry.name.substring(0, 20) + '...' : (entry.name || 'Inconnu'),
+                                        type: 'circle',
+                                        color: COLORS[index % COLORS.length]
+                                    }))}
+                                    wrapperStyle={{ fontSize: '10px', marginTop: '10px' }}
+                                />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
 
                 {/* Metrics Summary */}
