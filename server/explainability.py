@@ -375,6 +375,88 @@ class ExplainabilityEngine:
             # FIX: Cast to float for JSON safety
             "reliability_score": round(float(reliability), 2),
             "confidence_label": confidence,
-            "audit": audit,
             "display_text": "Zone d'attention du modèle (Grad-CAM++)"
         }
+
+    def calculate_cardiothoracic_ratio(self, image: Image.Image) -> Dict[str, Any]:
+        """
+        Morphology Engine: Calculate Heart/Thorax Ratio (CTR).
+        
+        Algorithm:
+        1. Segment Heart (Prompt: 'heart silhouette')
+        2. Segment Lungs (Prompt: 'lungs thoracic cage')
+        3. Calculate Max Width of Heart Mask.
+        4. Calculate Max Width of Lung Mask (at Costophrenic angle ideally, but Max Width is proxy).
+        5. Ratio = Heart / Lungs.
+        """
+        audit = {"ctr_status": "INIT"}
+        
+        try:
+            # 1. Heart Segmentation
+            heart_config = ExpertSegConfig(
+                modality="CXR",
+                target_organ="Heart",
+                anatomical_prompts=["heart silhouette", "cardiac shadow", "mediastinum"],
+                threshold_percentile=85, # Heart is salient
+                min_area_ratio=0.05,
+                max_area_ratio=0.40,
+                morphology_kernel=5
+            )
+            heart_res = self.generate_expert_mask(image, heart_config)
+            heart_mask = heart_res["mask"]
+            
+            if heart_mask is None:
+                return {"ctr": 0.0, "valid": False, "reason": "Heart segmentation failed"}
+                
+            # 2. Lung/Thorax Segmentation
+            lung_config = ExpertSegConfig(
+                modality="CXR",
+                target_organ="Thorax",
+                anatomical_prompts=["lung fields", "thoracic cage", "rib cage", "diaphragm"],
+                threshold_percentile=75,
+                min_area_ratio=0.20,
+                max_area_ratio=0.85,
+                morphology_kernel=5
+            )
+            lung_res = self.generate_expert_mask(image, lung_config)
+            lung_mask = lung_res["mask"]
+            
+            if lung_mask is None:
+                 return {"ctr": 0.0, "valid": False, "reason": "Lung segmentation failed"}
+                 
+            # 3. Calculate Widths
+            # Sum along Vertical Axis (0) -> shape (Width,)
+            # Pixels > 0.5 count as "structure"
+            
+            # Heart Width
+            heart_proj = np.max(heart_mask, axis=0) # [0, 1] projection
+            heart_pixels = np.where(heart_proj > 0.5)[0]
+            if len(heart_pixels) == 0:
+                 return {"ctr": 0.0, "valid": False, "reason": "Empty heart mask"}
+            heart_width = heart_pixels.max() - heart_pixels.min()
+            
+            # Lung Width
+            lung_proj = np.max(lung_mask, axis=0)
+            lung_pixels = np.where(lung_proj > 0.5)[0]
+            if len(lung_pixels) == 0:
+                 return {"ctr": 0.0, "valid": False, "reason": "Empty lung mask"}
+            lung_width = lung_pixels.max() - lung_pixels.min()
+            
+            # 4. Compute Ratio
+            if lung_width == 0:
+                 return {"ctr": 0.0, "valid": False, "reason": "Zero lung width"}
+                 
+            ctr = heart_width / lung_width
+            logger.info(f"📐 Morphology Engine: Heart={heart_width}px, Lungs={lung_width}px, CTR={ctr:.2f}")
+            
+            return {
+                "ctr": round(float(ctr), 2),
+                "heart_width_px": int(heart_width),
+                "lung_width_px": int(lung_width),
+                "valid": True,
+                "reason": "Success"
+            }
+            
+        except Exception as e:
+            logger.error(f"CTR Calculation Failed: {e}")
+            return {"ctr": 0.0, "valid": False, "reason": str(e)}

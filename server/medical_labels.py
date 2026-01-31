@@ -17,7 +17,7 @@ MEDICAL_DOMAINS = {
             {'id': 'TH_NORMAL', 'label_en': 'Normal chest radiograph: normal cardiothoracic ratio, clear lungs, no pleural abnormality'}, 
             {'id': 'TH_PNEUMOTHORAX', 'label_en': 'Pneumothorax (Lung collapse)'},
             {'id': 'TH_PLEURAL_EFFUSION', 'label_en': 'Pleural Effusion (Fluid)'},
-            {'id': 'TH_CARDIOMEGALY', 'label_en': 'Cardiomegaly with clear lung fields (no pulmonary edema)'}, 
+            {'id': 'TH_CARDIOMEGALY_CLEAR', 'label_en': 'Cardiomegaly with clear lung fields (no pulmonary edema)'}, 
             {'id': 'TH_CARDIOMEGALY_EDEMA', 'label_en': 'Cardiomegaly with pulmonary congestion or edema'},
             {'id': 'TH_EDEMA', 'label_en': 'Pulmonary Edema (without cardiomegaly)'},
             {'id': 'TH_NODULE', 'label_en': 'Lung Nodule or Mass'},
@@ -80,10 +80,10 @@ MEDICAL_DOMAINS = {
             {'id': 'OPH_AMD', 'label_en': 'Macular degeneration (drusen or atrophy)'}
         ],
         'logic_gate': {
-             'prompt': 'Is the fundus image clinically interpretable?',
-             'labels': ['Good quality fundus image', 'Poor quality, uninterpretable or partial view'],
-             'penalty_target': 'ALL_DIAGNOSIS',
-             'abnormal_index': 1
+            'prompt': 'Is the fundus image clinically interpretable?',
+            'labels': ['Good quality fundus image', 'Poor quality, uninterpretable or partial view'],
+            'penalty_target': 'ALL_DIAGNOSIS',
+            'abnormal_index': 1
         }
     },
     'Orthopedics': {
@@ -154,7 +154,7 @@ LABEL_TRANSLATIONS_FR = {
         'long': 'Accumulation de liquide dans l’espace pleural.',
         'severity': 'medium'
     },
-    'TH_CARDIOMEGALY': {
+    'TH_CARDIOMEGALY_CLEAR': {  # UPDATED ID
         'short': 'Cardiomégalie (Poumons clairs)',
         'long': 'Silhouette cardiaque augmentée de taille sans signe d’œdème pulmonaire.',
         'severity': 'medium'

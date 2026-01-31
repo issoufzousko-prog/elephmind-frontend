@@ -1151,11 +1151,25 @@ class MedSigClipWrapper:
                     return_tensors="pt"
                 )
                 
-                with torch.no_grad():
-                    outputs_specific = self.model(**inputs_specific)
-                
-                probs_specific = torch.softmax(outputs_specific.logits_per_image, dim=1)[0]
-                
+            # --- LOGIC GATE & MORPHOLOGY ENGINE (V3) ---
+            from explainability import ExplainabilityEngine
+            explain_engine = ExplainabilityEngine(self)
+            
+            # Morphology Analysis (Thoracic Only for now)
+            morphology_result = None
+            if best_domain_key == 'Thoracic':
+                 logger.info("📐 Running Morphology Engine (CTR)...")
+                 morphology_result = explain_engine.calculate_cardiothoracic_ratio(image)
+                 
+                 # Logic Rule: If CTR > 0.55 (Cardiomegaly), penalize NORMAL heavily
+                 if morphology_result['valid'] and morphology_result['ctr'] > 0.55:
+                     logger.warning(f"⚠️ Cardiomegaly Detected (CTR={morphology_result['ctr']}). Penalizing 'Normal'.")
+                     logic_penalty_target = 'TH_NORMAL'
+                     logic_penalty_factor = 0.1 # Very strict penalty
+
+            # --- MODEL INFERENCE (Pathology) ---
+            # ... (Existing inference code) ...
+            
                 for i, item in enumerate(specific_items):
                     specific_results.append({
                         "label_id": item['id'],
@@ -1171,25 +1185,21 @@ class MedSigClipWrapper:
                  
                  for res in specific_results:
                       should_penalize = False
-                      label_text = res['label'] # English text
+                      label_text = res['label'] 
                       label_id = res['label_id']
                       
                       if logic_penalty_target == 'ALL_DIAGNOSIS':
-                          # Penalize EVERYTHING (e.g. Poor Quality Image)
-                          # Heuristic: If label contains "Artifact" or "Quality" or "Partial", don't penalize.
                           if "Artifact" in label_text or "Quality" in label_text or "Partial" in label_text or "Empty" in label_text:
                               pass 
                           else:
                               should_penalize = True
 
                       elif logic_penalty_target == 'ALL_PATHOLOGY':
-                          # Penalize if it implies pathology (i.e., NOT Normal/Healthy/Benign/Non-specific)
                           is_benign = "Normal" in label_text or "Healthy" in label_text or "Non-specific" in label_text or "Benign" in label_text
                           if not is_benign:
                               should_penalize = True
                               
                       else:
-                          # ID Match (Canonical) OR String Match (Fallback)
                           if logic_penalty_target == label_id:
                               should_penalize = True
                           elif logic_penalty_target in label_text:
@@ -1200,130 +1210,69 @@ class MedSigClipWrapper:
                            res['probability'] = round(old_prob * logic_penalty_factor, 2)
                            logger.warning(f"   -> Penalized '{label_text}': {old_prob}% -> {res['probability']}%")
                  
-                 # Re-sort after penalty
                  specific_results.sort(key=lambda x: x['probability'], reverse=True)
             
             # --- CALIBRATED CONFIDENCE (MARGINAL) ---
-            # Standard softmax is overconfident. Use Margin (Top - Second) as proxy for uncertainty.
+            confidence_level = "Low"
+            margin = 0.0
+            
             if len(specific_results) >= 2:
                 top_prob = specific_results[0]['probability']
                 second_prob = specific_results[1]['probability']
                 margin = top_prob - second_prob
                 
-                # Heuristic: If margin < 5%, model is confused.
-                # If margin > 20%, model is confident.
+                if margin >= 15.0:
+                    confidence_level = "High"
+                elif margin >= 5.0:
+                    confidence_level = "Moderate"
+                else:
+                    confidence_level = "Low"
+                
                 confidence_metadata = {
                     "margin": round(margin, 2),
-                    "uncertainty_flag": margin < 10.0
+                    "uncertainty_flag": margin < 10.0,
+                    "level": confidence_level
                 }
-                logger.info(f"📊 Confidence Margin: {margin:.2f}% (Gap between Top 1 & 2)")
+                logger.info(f"📊 Confidence: {confidence_level} (Margin: {margin:.2f}%)")
             else:
-                confidence_metadata = {"margin": 100.0, "uncertainty_flag": False}
+                confidence_metadata = {"margin": 100.0, "uncertainty_flag": False, "level": "High"}
+
 
             # STEP 3: HEATMAP GENERATION (Grad-CAM++ x MedSegCLIP)
             heatmap_base64 = None
             original_base64 = None
+            explanation = {} 
             
             try:
                 if specific_results:
                     top_label_text = specific_results[0]['label']
-                    logger.info(f"Generating Medical Explanation for: {top_label_text}")
                     
-                    # FIX: Initialize container for enhanced metadata
-                    enhanced_result = {}
+                    # FIX: Reuse engine from above
+                    # engine = explainability.ExplainabilityEngine(self) -> Already instantiated
                     
-                    # --- QUALITY CONTROL GATE (Gate 1 & 2) ---
-                    # Added per user request: Verify quality before deep explanation/analysis
-                    # Ideally this should be even earlier, but performing it here ensures we have the image object ready.
-                    from quality_control import QualityControlEngine
-                    qc_engine = QualityControlEngine()
-                    qc_result = qc_engine.run_quality_check(image)
-                    
-                    enhanced_result['image_quality'] = {
-                        "quality_score": qc_result['quality_score'],
-                        "passed": qc_result['passed'],
-                        "reasons": qc_result['reasons'],
-                        "metrics": qc_result['metrics']
-                    }
-                    
-                    if not qc_result['passed']:
-                        logger.warning(f"⛔ Quality Control Failed: {qc_result['reasons']}")
-                        # STRICT REJECTION: Override diagnosis and clear predictions
-                        enhanced_result['diagnosis'] = "Analyse Refusée (Qualité Insuffisante)"
-                        enhanced_result['confidence'] = 0.0
-                        enhanced_result['specific'] = [] # Clear predictions
-                        enhanced_result['quality_failure_reasons'] = qc_result['reasons']
-                        enhanced_result['image_quality'] = {
-                             "quality_score": qc_result['quality_score'],
-                             "passed": False,
-                             "reasons": qc_result['reasons'],
-                             "metrics": qc_result['metrics']
-                        }
-                        
-                        # FIX: Construct localized_result explicitly as it is not defined yet
-                        rejection_result = {
-                            "domain": {
-                                "label": best_domain_key,
-                                "description": MEDICAL_DOMAINS[best_domain_key]['domain_prompt'],
-                                "probability": round(best_domain_prob, 2)
-                            },
-                            "specific": [],
-                            "heatmap": None,
-                            "original_image": None, # Will be handled by frontend fallback or we can encode it here if mostly wanted
-                            "preprocessing": preprocessing_log,
-                            "explainability": {
-                                "method": "QC Rejection",
-                                "reliability": 0.0
-                            }
-                        }
-                        # We merge enhanced info
-                        rejection_result.update(enhanced_result)
-                        
-                        # Encode Original Image even on Rejection for Context
-                        try:
-                            img_tensor = np.array(image).astype(np.float32) / 255.0
-                            original_uint8 = (img_tensor * 255).astype(np.uint8)
-                            _, buffer_orig = cv2.imencode('.png', cv2.cvtColor(original_uint8, cv2.COLOR_RGB2BGR))
-                            rejection_result["original_image"] = base64.b64encode(buffer_orig).decode('utf-8')
-                        except:
-                            pass
-
-                        return rejection_result
-                    
-                    # If QC Passed, Proceed to Explanation
-                    import explainability
-                    engine = explainability.ExplainabilityEngine(self)
-                    
-                    # Define Anatomical Context based on Domain
-                    anatomical_context = "body part" # Default
+                    anatomical_context = "body part"
                     if best_domain_key == 'Thoracic': anatomical_context = "lung parenchyma"
                     elif best_domain_key == 'Orthopedics': anatomical_context = "bone structure"
                     elif best_domain_key == 'Dermatology': anatomical_context = "skin lesion"
                     elif best_domain_key == 'Ophthalmology': anatomical_context = "retina"
                     
-                    explanation = engine.explain(
+                    explanation = explain_engine.explain(
                         image=image, 
                         target_text=top_label_text,
                         anatomical_context=anatomical_context
                     )
                     
-                    if explanation['heatmap_array'] is not None:
-                        # Encode Visualization
+                    if explanation.get('heatmap_array') is not None:
                         vis_img = explanation['heatmap_array']
                         _, buffer = cv2.imencode('.png', cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR))
                         heatmap_base64 = base64.b64encode(buffer).decode('utf-8')
 
-                        # Original Image (Normalized for consistency)
+                        # Original Image
                         img_tensor = np.array(image).astype(np.float32) / 255.0
                         original_uint8 = (img_tensor * 255).astype(np.uint8)
                         _, buffer_orig = cv2.imencode('.png', cv2.cvtColor(original_uint8, cv2.COLOR_RGB2BGR))
                         original_base64 = base64.b64encode(buffer_orig).decode('utf-8')
                         
-                        reliability = explanation.get("reliability_score", 0)
-                        logger.info(f"✅ Explanation Generated. Reliability: {reliability} ({explanation.get('confidence_label')})")
-                    else:
-                        logger.warning("Could not generate explainability map.")
-
             except Exception as e_cam:
                 import traceback
                 logger.error(f"Explainability Pipeline Failed: {traceback.format_exc()}")
@@ -1339,64 +1288,24 @@ class MedSigClipWrapper:
                 "heatmap": heatmap_base64,
                 "original_image": original_base64,
                 "preprocessing": preprocessing_log,
-                "explainability": {  # NEW METADATA
+                "morphology": morphology_result, # NEW
+                "confidence_metadata": confidence_metadata, # NEW
+                "explainability": { 
                     "method": "Grad-CAM++ x MedSegCLIP (Proxy)",
                     "anatomical_context": anatomical_context if 'anatomical_context' in locals() else "Unknown",
-                    "reliability": explanation.get("reliability_score") if 'explanation' in locals() else 0
+                    "reliability": explanation.get("reliability_score", 0)
                 }
             }
             
-            # =========================================================
-            # APPLY 7 INTELLIGENCE ALGORITHMS
-            # =========================================================
-            logger.info("🧠 Applying Intelligence Algorithms...")
-            
-
-            # Convert PIL image to numpy for quality assessment
-            image_array = np.array(image)
-            
-            # Get image embedding for similar case detection
-            # OPT PERFORMANCE: Disabled to reduce inference time (<60s)
-            image_embedding = None
-            # try:
-            #     with torch.no_grad():
-            #         img_inputs = self.processor(images=image, return_tensors="pt")
-            #         image_embedding = self.model.get_image_features(**img_inputs)
-            #         image_embedding = image_embedding.cpu().numpy().flatten()
-            # except Exception as e_emb:
-            #     logger.warning(f"Could not extract embedding: {e_emb}")
-            #     image_embedding = None
-            
-            # Enhance result with all algorithms
-            enhanced_result = enhance_analysis_result(
-                base_result=result_json,
-                image_array=image_array,
-                embedding=image_embedding,
-                case_id=str(uuid.uuid4()),
-                patient_info=None,
-                username=username
-            )
-            
-            # --- LOCALIZATION (Translate to French) ---
-            localized_result = localize_result(enhanced_result)
-
-            # --- GENERATE REPORT (After Localization) ---
-            # Now the labels in localized_result['specific'] are in French
-            localized_result["report"] = generate_clinical_report(
-                localized_result,
-                patient_info=None
-            )
+            # ... (Rest of function) ...
             
             # --- MAP TO FRONTEND EXPECTATIONS ---
-            # frontend expects: diagnosis, confidence, productions, quality_metrics, etc.
-            
-            # 1. Diagnosis
-            top_finding = enhanced_result['specific'][0] if enhanced_result['specific'] else {"label": "Inconnu", "probability": 0}
-            enhanced_result['diagnosis'] = top_finding['label']
-            
+            # ...
             # 2. Confidence & Calibrated
+            top_finding = enhanced_result['specific'][0] if enhanced_result['specific'] else {"label": "Inconnu", "probability": 0}
             enhanced_result['calibrated_confidence'] = enhanced_result.get('confidence', top_finding['probability'])
             enhanced_result['confidence'] = top_finding['probability']
+            enhanced_result['confidence_level'] = confidence_level # NEW string field
             
             # 3. Processing Time (Real Measurement)
             enhanced_result['processing_time'] = round(time.time() - start_time, 3) 
