@@ -1933,5 +1933,7 @@ if __name__ == "__main__":
     database.init_analysis_registry()
     
     host = os.getenv("SERVER_HOST", "0.0.0.0")
-    port = int(os.getenv("SERVER_PORT", "8022"))
+    # Hugging Face Spaces provides 'PORT' env var (usually 7860)
+    port = int(os.getenv("PORT", "7860")) 
+    logger.info(f"🚀 Starting Uvicorn on {host}:{port}")
     uvicorn.run(app, host=host, port=port)
