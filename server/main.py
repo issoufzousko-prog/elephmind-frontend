@@ -1281,7 +1281,7 @@ class MedSigClipWrapper:
                 logger.error(f"Explainability Pipeline Failed: {traceback.format_exc()}")
 
             # FINAL RESULT (Base)
-            result_json = {
+            enhanced_result = {
                 "domain": {
                     "label": best_domain_key,
                     "description": MEDICAL_DOMAINS[best_domain_key]['domain_prompt'],
