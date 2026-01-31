@@ -967,10 +967,14 @@ const Analysis = () => {
 
                 const data = await res.json();
                 console.log('📊 Poll Response:', JSON.stringify(data, null, 2));
+                console.log('📌 Status:', data.status);
+                console.log('📌 Result exists:', !!data.result);
+                console.log('📌 Error:', data.error);
 
                 if (data.status === 'completed') {
                     clearInterval(interval);
                     console.log('✅ Result received:', data.result);
+                    console.log('✅ Setting result to state...');
                     setResult(data.result);
                     setIsAnalyzing(false);
 
