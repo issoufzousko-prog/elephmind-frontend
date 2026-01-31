@@ -1168,9 +1168,12 @@ class MedSigClipWrapper:
                      logic_penalty_factor = 0.1 # Very strict penalty
 
             # --- MODEL INFERENCE (Pathology) ---
-            # ... (Existing inference code) ...
+            with torch.no_grad():
+                outputs_specific = self.model(**inputs_specific)
             
-                for i, item in enumerate(specific_items):
+            probs_specific = torch.softmax(outputs_specific.logits_per_image, dim=1)[0]
+            
+            for i, item in enumerate(specific_items):
                     specific_results.append({
                         "label_id": item['id'],
                         "label": item['label_en'], # Keep EN for internal logic
