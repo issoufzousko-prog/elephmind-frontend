@@ -963,7 +963,18 @@ class MedSigClipWrapper:
                     
                     localized['specific'] = new_specific
                 
-                # 3. Handle QC failure case (already localized manually in rejection_result)
+                # 3. Set Diagnosis from top translated specific result
+                if 'specific' in localized and len(localized['specific']) > 0:
+                    localized['diagnosis'] = localized['specific'][0].get('label', 'Inconnu')
+                elif 'diagnosis_id' in localized:
+                    # Fallback: Translate diagnosis_id if present
+                    translation = LABEL_TRANSLATIONS_FR.get(localized['diagnosis_id'])
+                    if translation:
+                        localized['diagnosis'] = translation['short']
+                    else:
+                        localized['diagnosis'] = 'Diagnostic Inconnu'
+                
+                # 4. Handle QC failure case (already localized manually in rejection_result)
                 if 'diagnosis' in localized and "Analyse Refusée" in localized['diagnosis']:
                      pass # Already localized string
                 
@@ -1308,14 +1319,18 @@ class MedSigClipWrapper:
             # Formula: Final = Model_Prob * QC_Score * Reliability_Score
             # This prevents "high confidence" on garbage images or when Grad-CAM disagrees.
             
-            top_finding = enhanced_result['specific'][0] if enhanced_result['specific'] else {"label": "Inconnu", "probability": 0}
-            enhanced_result['diagnosis'] = top_finding['label']
-
-            model_conf = float(enhanced_result.get('confidence', top_finding['probability'])) / 100.0
-            qc_score = float(enhanced_result.get('quality_score', 0)) / 100.0
+            top_finding = enhanced_result['specific'][0] if enhanced_result['specific'] else {"label": "Inconnu", "probability": 0, "label_id": "UNKNOWN"}
             
-            # Reliability: If missing (e.g. QC failed), default to 0.5 to not kill score completely if just missing, or 0 if critical.
-            # But if QC passed, explainability should run.
+            # Don't set diagnosis yet - let localize_result() handle translation
+            # Just store the label_id for localization
+            if 'label_id' in top_finding:
+                enhanced_result['diagnosis_id'] = top_finding['label_id']
+            
+            # Get model confidence from top finding probability
+            model_conf = float(top_finding['probability']) / 100.0
+            qc_score = float(qc_result.get('quality_score', 0)) / 100.0
+            
+            # Reliability: If missing (e.g. QC failed), default to 1.0
             reliability_score = float(enhanced_result['explainability'].get('reliability', 1.0))
             if reliability_score == 0: reliability_score = 1.0 # Fallback if method not applicable
             
@@ -1345,10 +1360,10 @@ class MedSigClipWrapper:
                 for item in enhanced_result['specific']
             ]
             
-            # 5. Quality Metrics (Flatten structure)
-            if 'image_quality' in enhanced_result:
-                enhanced_result['quality_score'] = enhanced_result['image_quality']['quality_score']
-                enhanced_result['quality_metrics'] = enhanced_result['image_quality']['metrics']
+            # 5. Quality Metrics (Flatten structure for frontend)
+            enhanced_result['quality_score'] = qc_result['quality_score']
+            enhanced_result['quality_metrics'] = qc_result['metrics']
+            enhanced_result['image_quality'] = qc_result # Keep full structure too
             
             # 6. Priority
             # If priority is a dict (from new algo), extract just the level/score for simple display, or keep object
