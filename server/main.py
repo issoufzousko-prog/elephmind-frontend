@@ -1062,6 +1062,47 @@ class MedSigClipWrapper:
             # except Exception as e_preproc:
             #     logger.warning(f"Adaptive preprocessing skipped: {e_preproc}")
 
+            # =========================================================
+            # ✅ V5 QC GATE: Quality Check BEFORE Model Inference
+            # =========================================================
+            image_array = np.array(image)
+            qc_result = assess_image_quality(image_array)
+            quality_score = qc_result.get('overall_score', 0)
+            
+            logger.info(f"📊 QC Gate: Quality Score = {quality_score:.2f}")
+            
+            # Define QC threshold (configurable)
+            QC_THRESHOLD = 0.35  # Images below this are rejected
+            
+            if quality_score < QC_THRESHOLD:
+                # ❌ EARLY REJECTION: Don't call model
+                logger.warning(f"❌ QC Gate REJECTED: Quality {quality_score:.2f} < {QC_THRESHOLD}")
+                
+                rejection_result = {
+                    "domain": {"label": "QC Failed"},
+                    "diagnosis": f"Analyse Refusée - Qualité Image Insuffisante ({int(quality_score*100)}%)",
+                    "specific": [{
+                        "label": "Qualité Insuffisante",
+                        "label_id": "QC_FAILED",
+                        "probability": 0,
+                        "description": f"L'image ne répond pas aux critères de qualité minimale. Score: {int(quality_score*100)}%"
+                    }],
+                    "priority": "Normale",
+                    "confidence": 0,
+                    "quality_metrics": [
+                        {"metric": "Score Global", "value": int(quality_score * 100)},
+                        {"metric": "Netteté", "value": int(qc_result.get('sharpness', 0) * 100)},
+                        {"metric": "Contraste", "value": int(qc_result.get('contrast', 0) * 100)},
+                        {"metric": "Bruit", "value": int(qc_result.get('noise', 0) * 100)},
+                    ],
+                    "qc_issues": qc_result.get('issues', []),
+                    "qc_passed": False
+                }
+                
+                return localize_result(rejection_result)
+
+            logger.info(f"✅ QC Gate PASSED: Quality {quality_score:.2f} >= {QC_THRESHOLD}")
+
             # STEP 1: DOMAIN IDENTIFICATION
             domain_keys = list(MEDICAL_DOMAINS.keys())
             domain_prompts = [d['domain_prompt'] for d in MEDICAL_DOMAINS.values()]
@@ -1313,11 +1354,9 @@ class MedSigClipWrapper:
             
             # ... (Rest of function) ...
             
-            # --- IMAGE QUALITY ASSESSMENT (Before Calibration) ---
-            # Convert PIL Image to numpy array for QC
-            image_array = np.array(image)
-            qc_result = assess_image_quality(image_array)
-            logger.info(f"📊 Image Quality: {qc_result['quality_score']}%")
+            # ✅ V5: QC already assessed in QC Gate before model inference
+  # qc_result already available from QC Gate above
+            logger.info(f"📊 Final Quality Score (from QC Gate): {qc_result['overall_score']*100:.1f}%")
             
             # --- MAP TO FRONTEND EXPECTATIONS ---
             # ...
@@ -1334,17 +1373,18 @@ class MedSigClipWrapper:
             
             # Get model confidence from top finding probability
             model_conf = float(top_finding['probability']) / 100.0
-            qc_score = float(qc_result.get('quality_score', 0)) / 100.0
+            qc_score = float(qc_result.get('overall_score', 0))  # ✅ V5: Use overall_score from QC Gate
             
             # Reliability: If missing (e.g. QC failed), default to 1.0
             reliability_score = float(enhanced_result['explainability'].get('reliability', 1.0))
             if reliability_score == 0: reliability_score = 1.0 # Fallback if method not applicable
             
-            # Calculate composite score
+            # ✅ V5 CALIBRATED CONFIDENCE: Model × QC × Explainability
+            # This prevents high conf on low quality images
             final_confidence_score = model_conf * qc_score * reliability_score
             final_confidence_percent = round(final_confidence_score * 100, 2)
             
-            logger.info(f"⚖️ Calibration: Model({model_conf:.2f}) * QC({qc_score:.2f}) * Rel({reliability_score:.2f}) = {final_confidence_score:.2f}")
+            logger.info(f"⚖️ Confidence Calibration: Model({model_conf:.2f}) × QC({qc_score:.2f}) × Reliability({reliability_score:.2f}) = {final_confidence_score:.2f}")
             
             enhanced_result['calibrated_confidence'] = final_confidence_percent
             enhanced_result['confidence'] = final_confidence_percent # Override raw confidence
@@ -1367,7 +1407,7 @@ class MedSigClipWrapper:
             ]
             
             # 5. Quality Metrics (Flatten structure for frontend)
-            enhanced_result['quality_score'] = qc_result['quality_score']
+            enhanced_result['quality_score'] = int(qc_result['overall_score'] * 100)  # ✅ V5: Convert to percentage
             enhanced_result['quality_metrics'] = qc_result['metrics']
             enhanced_result['image_quality'] = qc_result # Keep full structure too
             
@@ -1790,6 +1830,74 @@ async def get_current_job(current_user: User = Depends(get_current_active_user))
         "created_at": created_at,
         "image_id": job.get('storage_path')
     }
+
+# =========================================================================
+# ✅ V5 REFRESH RECOVERY: Get Current User State
+# =========================================================================
+@app.get("/api/state/current")
+async def get_current_state(current_user: User = Depends(get_current_user)):
+    """
+    ✅ V5 Endpoint: Returns the user's current analysis state for UI reconstruction.
+    
+    After a page refresh, the frontend calls this to restore its state:
+    - IDLE: No active analysis, show upload form
+    - ANALYZING: Job running, resume polling
+    - COMPLETED: Show results
+    - FAILED: Show error
+    - QC_FAILED: Show quality rejection message
+    """
+    # Get most recent job for this user
+    latest_job = database.get_latest_job(current_user.username)
+    
+    if not latest_job:
+        return {"state": "IDLE", "message": "Aucune analyse en cours"}
+    
+    job_status = latest_job.get('status', 'unknown')
+    job_id = latest_job.get('id')
+    created_at = latest_job.get('created_at')
+    
+    # Check if job is recent (within last 24h) to avoid showing stale data
+    import time
+    if created_at and (time.time() - created_at) > 86400:  # 24 hours
+        return {"state": "IDLE", "message": "Dernière analyse trop ancienne"}
+    
+    if job_status in ['pending', 'processing']:
+        return {
+            "state": "ANALYZING",
+            "job_id": job_id,
+            "task_id": job_id,  # Alias for frontend compatibility
+            "image_id": latest_job.get('storage_path'),
+            "started_at": created_at,
+            "message": "Analyse en cours..."
+        }
+    elif job_status == 'completed':
+        result = latest_job.get('result', {})
+        
+        # Check if this was a QC rejection
+        if result.get('qc_passed') == False:
+            return {
+                "state": "QC_FAILED",
+                "job_id": job_id,
+                "result": result,
+                "message": result.get('diagnosis', 'Qualité image insuffisante')
+            }
+        
+        return {
+            "state": "COMPLETED",
+            "job_id": job_id,
+            "result": result,
+            "message": "Analyse terminée"
+        }
+    elif job_status == 'failed':
+        return {
+            "state": "FAILED",
+            "job_id": job_id,
+            "error": latest_job.get('error', 'Erreur inconnue'),
+            "message": "L'analyse a échoué"
+        }
+    
+    # Unknown status - treat as idle
+    return {"state": "IDLE", "message": "État inconnu"}
 
 @app.get("/result/{task_id}")
 async def get_result(task_id: str, current_user: User = Depends(get_current_user)):
