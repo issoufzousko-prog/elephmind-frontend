@@ -1366,7 +1366,7 @@ class MedSigClipWrapper:
             logger.info("✅ Intelligence Algorithms applied successfully")
             
             # --- LOCALIZATION (Translate to French) ---
-            localized_result = localize_to_french(enhanced_result)
+            localized_result = localize_result(enhanced_result)
             
             return localized_result
 
