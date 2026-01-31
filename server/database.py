@@ -485,3 +485,29 @@ def get_latest_job(username: str) -> Optional[Dict[str, Any]]:
                 job['result'] = None
         return job
     return None
+
+def get_active_job_by_image(username: str, image_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve the most recent job for a specific image and user.
+    Used for Idempotence (Strict Lifecycle).
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('''
+        SELECT * FROM jobs 
+        WHERE username = ? AND storage_path = ?
+        ORDER BY created_at DESC 
+        LIMIT 1
+    ''', (username, image_id))
+    row = c.fetchone()
+    conn.close()
+    
+    if row:
+        job = dict(row)
+        if job['result']:
+            try:
+                job['result'] = json.loads(job['result'])
+            except:
+                job['result'] = None
+        return job
+    return None

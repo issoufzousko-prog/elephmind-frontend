@@ -1301,11 +1301,37 @@ class MedSigClipWrapper:
             
             # --- MAP TO FRONTEND EXPECTATIONS ---
             # ...
-            # 2. Confidence & Calibrated
+            # 2. STRICT CONFIDENCE CALIBRATION (V4 Backend Authority)
+            # Formula: Final = Model_Prob * QC_Score * Reliability_Score
+            # This prevents "high confidence" on garbage images or when Grad-CAM disagrees.
+            
             top_finding = enhanced_result['specific'][0] if enhanced_result['specific'] else {"label": "Inconnu", "probability": 0}
-            enhanced_result['calibrated_confidence'] = enhanced_result.get('confidence', top_finding['probability'])
-            enhanced_result['confidence'] = top_finding['probability']
-            enhanced_result['confidence_level'] = confidence_level # NEW string field
+            enhanced_result['diagnosis'] = top_finding['label']
+
+            model_conf = float(enhanced_result.get('confidence', top_finding['probability'])) / 100.0
+            qc_score = float(enhanced_result.get('quality_score', 0)) / 100.0
+            
+            # Reliability: If missing (e.g. QC failed), default to 0.5 to not kill score completely if just missing, or 0 if critical.
+            # But if QC passed, explainability should run.
+            reliability_score = float(enhanced_result['explainability'].get('reliability', 1.0))
+            if reliability_score == 0: reliability_score = 1.0 # Fallback if method not applicable
+            
+            # Calculate composite score
+            final_confidence_score = model_conf * qc_score * reliability_score
+            final_confidence_percent = round(final_confidence_score * 100, 2)
+            
+            logger.info(f"⚖️ Calibration: Model({model_conf:.2f}) * QC({qc_score:.2f}) * Rel({reliability_score:.2f}) = {final_confidence_score:.2f}")
+            
+            enhanced_result['calibrated_confidence'] = final_confidence_percent
+            enhanced_result['confidence'] = final_confidence_percent # Override raw confidence
+            
+            # Update Level based on Calibrated Score
+            if final_confidence_percent > 85:
+                 enhanced_result['confidence_level'] = "High"
+            elif final_confidence_percent > 50:
+                 enhanced_result['confidence_level'] = "Moderate"
+            else:
+                 enhanced_result['confidence_level'] = "Low"
             
             # 3. Processing Time (Real Measurement)
             enhanced_result['processing_time'] = round(time.time() - start_time, 3) 
@@ -1659,6 +1685,33 @@ async def analyze_image(
             raise FileNotFoundError()
     except Exception:
         raise HTTPException(status_code=404, detail="Image ID not found. Upload first.")
+
+    # --- IDEMPOTENCE CHECK (V4 Backend Authority) ---
+    # Check if a job already exists for this image/user
+    existing_job = database.get_active_job_by_image(current_user.username, request.image_id)
+    
+    if existing_job:
+        status_val = existing_job.get('status')
+        job_age = time.time() - existing_job.get('created_at', 0)
+        
+        # If job is running or completed recently (< 24h), return it.
+        # This solves the "Refresh = Duplicate Analysis" bug.
+        if status_val in [JobStatus.PENDING.value, JobStatus.PROCESSING.value]:
+             logger.info(f"♻️ Returning EXISTING running job {existing_job['id']} for image {request.image_id}")
+             return {
+                "task_id": existing_job['id'], 
+                "status": status_val,
+                "image_id": request.image_id,
+                "message": "Job already running"
+             }
+        elif status_val == JobStatus.COMPLETED.value and job_age < 86400:
+             logger.info(f"♻️ Returning EXISTING completed job {existing_job['id']} for image {request.image_id}")
+             return {
+                "task_id": existing_job['id'], 
+                "status": "completed",
+                "image_id": request.image_id,
+                "message": "Job already completed"
+             }
 
     # Create Job ID
     task_id = str(uuid.uuid4())
