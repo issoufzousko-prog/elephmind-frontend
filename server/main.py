@@ -1313,6 +1313,12 @@ class MedSigClipWrapper:
             
             # ... (Rest of function) ...
             
+            # --- IMAGE QUALITY ASSESSMENT (Before Calibration) ---
+            # Convert PIL Image to numpy array for QC
+            image_array = np.array(image)
+            qc_result = assess_image_quality(image_array)
+            logger.info(f"📊 Image Quality: {qc_result['quality_score']}%")
+            
             # --- MAP TO FRONTEND EXPECTATIONS ---
             # ...
             # 2. STRICT CONFIDENCE CALIBRATION (V4 Backend Authority)
