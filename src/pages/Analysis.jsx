@@ -751,6 +751,8 @@ const Analysis = () => {
     const [image, setImage] = useState(null);
     // Initialize isAnalyzing from context
     const [isAnalyzing, setIsAnalyzing] = useState(() => currentAnalysis ? currentAnalysis.status === 'analyzing' : false);
+    const [error, setError] = useState(null);
+    const navigate = useNavigate();
 
     // Initialize result from context if available
     const [result, setResult] = useState(() => currentAnalysis ? currentAnalysis.result : null);
@@ -760,11 +762,7 @@ const Analysis = () => {
         // Restore image preview if available in context
         if (currentAnalysis?.imagePreview) {
             // We can't easily recreate the File object, but we can restore the visual preview
-            // We'll set a flag or local state to show this preview
-            setImage(null); // Clear file input as we rely on preview
-            // Pass the preview to the UploadZone via a prop or internal state? 
-            // Actually, ImageUploadZone uses 'image' prop. If it's null, it shows dropzone.
-            // We need to trick it or modify ImageUploadZone to accept a 'previewUrl' override.
+            setImage(null);
         }
 
         if (currentAnalysis && currentAnalysis.status === 'analyzing' && currentAnalysis.taskId) {
@@ -797,22 +795,48 @@ const Analysis = () => {
     }, [currentAnalysis]); // Run ONCE on mount
 
     // Sync result to context when it changes (save)
+    // --- STATE RECOVERY (Source of Truth: Backend) ---
     useEffect(() => {
-        if (result && !isAnalyzing) {
-            const analysisData = {
-                status: 'completed',
-                result: result,
-                taskId: null, // Clear task ID when done
-                // Persist the preview for the result view if needed (though result often has it)
-                imagePreview: currentAnalysis?.imagePreview
-            };
-            setCurrentAnalysis(analysisData);
-        }
-    }, [result, isAnalyzing, setCurrentAnalysis]);
+        const restoreState = async () => {
+            const token = localStorage.getItem('token');
+            if (!token) return;
 
+            try {
+                // FORCE RESYNC with Backend
+                const res = await fetch(`${API_URL}/job/current`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
 
-    const [error, setError] = useState(null);
-    const navigate = useNavigate();
+                if (res.ok) {
+                    const job = await res.json();
+                    console.log("🔄 Restoring Job State:", job);
+
+                    if (job.status === 'pending' || job.status === 'processing') {
+                        // Job is running -> Restore "Analyzing" state
+                        setIsAnalyzing(true);
+                        setCurrentAnalysis({
+                            status: 'analyzing',
+                            taskId: job.task_id,
+                            imagePreview: null
+                        });
+                        pollResult(job.task_id); // Resume polling
+                    } else if (job.status === 'completed' && job.result) {
+                        // Job done -> Show Result immediately
+                        setResult(job.result);
+                        setIsAnalyzing(false);
+                    } else if (job.status === 'failed') {
+                        // Job failed -> Show error
+                        setError(job.error || "L'analyse précédente a échoué.");
+                        setIsAnalyzing(false);
+                    }
+                }
+            } catch (err) {
+                console.warn("Could not restore state:", err);
+            }
+        };
+
+        restoreState();
+    }, []); // Run ONCE on mount
 
     const handleAnalyze = async () => {
         if (!image) return;
