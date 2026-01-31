@@ -456,7 +456,7 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
             id="report-content"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-6 bg-white dark:bg-gray-900 p-4 rounded-xl" // Added bg for clear capture
+            className="space-y-4 bg-white dark:bg-gray-900 p-3 rounded-xl" // Compact spacing
         >
             {/* Main Diagnosis Card */}
             <div className="bg-gradient-to-br from-brand-primary to-emerald-600 rounded-2xl p-6 text-white shadow-xl">
@@ -535,33 +535,28 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                 </div>
             )}
 
-            {/* Charts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Charts Grid - 3 columns for horizontal layout */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {/* Probability Bar Chart */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <TrendingUp className="h-5 w-5 text-brand-primary" />
-                        Probabilités par Pathologie
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-gray-100 dark:border-gray-700">
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 text-brand-primary" />
+                        Probabilités
                     </h3>
-                    <div className="min-h-[300px] h-[40vh] max-h-[500px]">
+                    <div className="h-[200px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={translatedPredictions} layout="vertical" margin={{ left: 20, right: 20 }}>
+                            <BarChart data={translatedPredictions} layout="vertical" margin={{ left: 10, right: 10 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                                <XAxis type="number" domain={[0, 100]} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                                <XAxis type="number" domain={[0, 100]} tick={{ fill: '#6b7280', fontSize: 10 }} />
                                 <YAxis
                                     type="category"
                                     dataKey="name"
-                                    width={220}
-                                    tick={{ fill: '#6b7280', fontSize: 10 }}
-                                    tickFormatter={(value) => (value && value.length > 45) ? value.substring(0, 45) + '...' : (value || '')}
+                                    width={100}
+                                    tick={{ fill: '#6b7280', fontSize: 9 }}
+                                    tickFormatter={(value) => (value && value.length > 20) ? value.substring(0, 20) + '...' : (value || '')}
                                 />
                                 <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: '#1f2937',
-                                        border: 'none',
-                                        borderRadius: '8px',
-                                        color: '#fff'
-                                    }}
+                                    contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                                     formatter={(value) => [`${value}%`, 'Probabilité']}
                                 />
                                 <Bar dataKey="probability" fill="#1B7D7D" radius={[0, 4, 4, 0]} />
@@ -571,33 +566,27 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                 </div>
 
                 {/* Quality Radar Chart */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <Stethoscope className="h-5 w-5 text-brand-primary" />
-                        Qualité de l'Image
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-gray-100 dark:border-gray-700">
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                        <Stethoscope className="h-4 w-4 text-brand-primary" />
+                        Qualité Image
                     </h3>
-                    <div className="min-h-[220px] h-[30vh] max-h-[350px]">
+                    <div className="h-[180px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <RadarChart data={qualityMetrics}>
                                 <PolarGrid stroke="#e5e7eb" />
-                                <PolarAngleAxis dataKey="metric" tick={{ fill: '#6b7280', fontSize: 11 }} />
+                                <PolarAngleAxis dataKey="metric" tick={{ fill: '#6b7280', fontSize: 10 }} />
                                 <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                                <Radar
-                                    name="Qualité"
-                                    dataKey="value"
-                                    stroke="#1B7D7D"
-                                    fill="#1B7D7D"
-                                    fillOpacity={0.5}
-                                />
+                                <Radar name="Qualité" dataKey="value" stroke="#1B7D7D" fill="#1B7D7D" fillOpacity={0.5} />
                             </RadarChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
                 {/* Pie Chart */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Distribution des Résultats</h3>
-                    <div className="min-h-[280px] h-[35vh] max-h-[400px]">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-gray-100 dark:border-gray-700">
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-2">Distribution</h3>
+                    <div className="h-[180px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
@@ -606,7 +595,7 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                                     nameKey="name"
                                     cx="50%"
                                     cy="45%"
-                                    outerRadius="65%"
+                                    outerRadius="60%"
                                     label={false}
                                 >
                                     {translatedPredictions.slice(0, 5).map((entry, index) => (
@@ -619,11 +608,11 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                                     verticalAlign="bottom"
                                     align="center"
                                     payload={(translatedPredictions || []).slice(0, 3).map((entry, index) => ({
-                                        value: (entry.name && entry.name.length > 20) ? entry.name.substring(0, 20) + '...' : (entry.name || 'Inconnu'),
+                                        value: (entry.name && entry.name.length > 15) ? entry.name.substring(0, 15) + '...' : (entry.name || 'Inconnu'),
                                         type: 'circle',
                                         color: COLORS[index % COLORS.length]
                                     }))}
-                                    wrapperStyle={{ fontSize: '10px', marginTop: '10px' }}
+                                    wrapperStyle={{ fontSize: '9px' }}
                                 />
                             </PieChart>
                         </ResponsiveContainer>
@@ -631,28 +620,28 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                 </div>
 
                 {/* Metrics Summary */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Métriques Avancées</h3>
-                    <div className="space-y-4">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-gray-100 dark:border-gray-700">
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3">Métriques</h3>
+                    <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                            <span className="text-gray-600 dark:text-gray-400">Score Qualité Image</span>
-                            <span className="font-bold text-gray-900 dark:text-white">{qualityScore}%</span>
+                            <span className="text-xs text-gray-600 dark:text-gray-400">Qualité Image</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">{qualityScore}%</span>
                         </div>
-                        <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                             <div className="h-full bg-green-500 rounded-full" style={{ width: `${qualityScore}%` }} />
                         </div>
 
-                        <div className="flex justify-between items-center pt-2">
-                            <span className="text-gray-600 dark:text-gray-400">Confiance Calibrée</span>
-                            <span className="font-bold text-gray-900 dark:text-white">{calibratedConfidence}%</span>
+                        <div className="flex justify-between items-center pt-1">
+                            <span className="text-xs text-gray-600 dark:text-gray-400">Confiance Calibrée</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">{calibratedConfidence}%</span>
                         </div>
-                        <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                             <div className="h-full bg-brand-primary rounded-full" style={{ width: `${calibratedConfidence}%` }} />
                         </div>
 
-                        <div className="flex justify-between items-center pt-2">
-                            <span className="text-gray-600 dark:text-gray-400">Cas Similaires Trouvés</span>
-                            <span className="font-bold text-gray-900 dark:text-white">{similarCases}</span>
+                        <div className="flex justify-between items-center pt-1">
+                            <span className="text-xs text-gray-600 dark:text-gray-400">Cas Similaires</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">{similarCases}</span>
                         </div>
                     </div>
                 </div>
@@ -714,31 +703,33 @@ const ResultsPanel = ({ result, isAnalyzing }) => {
                     <FileText className="h-5 w-5" />
                     Voir Dossier
                 </button>
-            </div>
+            </div >
 
             {/* Image Zoom Modal */}
-            {zoomedImage && (
-                <div
-                    className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
-                    onClick={() => setZoomedImage(null)}
-                >
-                    <div className="relative max-w-4xl max-h-[90vh]">
-                        <button
-                            className="absolute -top-10 right-0 text-white hover:text-gray-300"
-                            onClick={() => setZoomedImage(null)}
-                        >
-                            <X className="h-8 w-8" />
-                        </button>
-                        <img
-                            src={zoomedImage.src}
-                            alt={zoomedImage.title}
-                            className="max-w-full max-h-[85vh] object-contain rounded-lg"
-                        />
-                        <p className="text-center text-white mt-2">{zoomedImage.title}</p>
+            {
+                zoomedImage && (
+                    <div
+                        className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+                        onClick={() => setZoomedImage(null)}
+                    >
+                        <div className="relative max-w-4xl max-h-[90vh]">
+                            <button
+                                className="absolute -top-10 right-0 text-white hover:text-gray-300"
+                                onClick={() => setZoomedImage(null)}
+                            >
+                                <X className="h-8 w-8" />
+                            </button>
+                            <img
+                                src={zoomedImage.src}
+                                alt={zoomedImage.title}
+                                className="max-w-full max-h-[85vh] object-contain rounded-lg"
+                            />
+                            <p className="text-center text-white mt-2">{zoomedImage.title}</p>
+                        </div>
                     </div>
-                </div>
-            )}
-        </motion.div>
+                )
+            }
+        </motion.div >
     );
 };
 
